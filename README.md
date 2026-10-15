@@ -40,13 +40,13 @@ $ echo "DB_PASS=123" | gh clip
 
 With nothing piped in, opens an interactive list of your recent clips.
 
-| Key       | Action                                   |
-| --------- | ---------------------------------------- |
-| `↑` / `↓` | Move (`j`/`k` also work)                 |
-| `enter`   | Copy the clip to the system clipboard    |
-| `q`       | Show the clip as a QR code               |
-| `d`       | Delete the clip (asks for confirmation)  |
-| `esc`     | Quit                                     |
+| Key       | Action                                       |
+| --------- | -------------------------------------------- |
+| `↑` / `↓` | Move (`j`/`k` also work)                     |
+| `enter`   | Copy the clip to the system clipboard        |
+| `q`       | Share the clip as a QR code (like `--share`) |
+| `d`       | Delete the clip (asks for confirmation)      |
+| `esc`     | Quit                                         |
 
 ### `... | gh clip --share`
 

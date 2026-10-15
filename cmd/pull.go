@@ -3,7 +3,9 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/SamuelBisberg/gh-clip/pkg/gist"
 	"github.com/SamuelBisberg/gh-clip/pkg/store"
 	"github.com/SamuelBisberg/gh-clip/pkg/tui"
 )
@@ -37,7 +39,16 @@ func runPull() error {
 		return hintInit(err)
 	}
 
-	res, err := tui.RunList(theme, clips, tui.ListActions{Delete: st.Delete})
+	res, err := tui.RunList(theme, clips, tui.ListActions{
+		Delete: st.Delete,
+		Share: func(c store.Clip) (string, error) {
+			id, err := gist.Create(sess.rest, c.Content, time.Now().Add(cfg.ShareTTL()))
+			if err != nil {
+				return "", err
+			}
+			return gist.ViewerURL(sess.owner, id), nil
+		},
+	})
 	if err != nil {
 		return fmt.Errorf("running picker: %w", err)
 	}

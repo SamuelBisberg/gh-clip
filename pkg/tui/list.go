@@ -14,6 +14,9 @@ import (
 // bubbletea commands, off the UI goroutine.
 type ListActions struct {
 	Delete func(store.Clip) error
+	// Share publishes a clip as an expiring Gist and returns the viewer URL
+	// that the QR code points at.
+	Share func(store.Clip) (string, error)
 }
 
 // ListResult reports what the user did when the list exited.
@@ -27,12 +30,18 @@ type listMode int
 const (
 	modeList listMode = iota
 	modeQR
+	modeSharing
 	modeConfirmDelete
 )
 
 type deletedMsg struct {
 	name string
 	err  error
+}
+
+type sharedMsg struct {
+	url string
+	err error
 }
 
 type listModel struct {
@@ -45,6 +54,7 @@ type listModel struct {
 	width   int
 	mode    listMode
 	qr      string
+	qrURL   string
 	status  string
 	result  ListResult
 }
@@ -89,6 +99,22 @@ func (m *listModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.status = m.theme.Success.Render("✓") + " Deleted"
 		m.clamp()
+	case sharedMsg:
+		if m.mode != modeSharing {
+			return m, nil
+		}
+		m.mode = modeList
+		if msg.err != nil {
+			m.status = m.theme.Error.Render("✗ " + msg.err.Error())
+			return m, nil
+		}
+		qr, err := QRString(msg.url)
+		if err != nil {
+			m.status = m.theme.Warning.Render("⚠ " + err.Error())
+			return m, nil
+		}
+		m.qr, m.qrURL = qr, msg.url
+		m.mode = modeQR
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -104,6 +130,11 @@ func (m *listModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.mode {
 	case modeQR:
 		m.mode = modeList
+		return m, nil
+	case modeSharing:
+		if key == "esc" {
+			m.mode = modeList
+		}
 		return m, nil
 	case modeConfirmDelete:
 		if key == "y" && len(m.clips) > 0 {
@@ -138,13 +169,16 @@ func (m *listModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.clips) == 0 {
 			return m, tea.Quit
 		}
-		qr, err := QRString(m.clips[m.cursor].Content)
-		if err != nil {
-			m.status = m.theme.Warning.Render("⚠ " + err.Error())
+		if m.actions.Share == nil {
 			return m, nil
 		}
-		m.qr = qr
-		m.mode = modeQR
+		clip := m.clips[m.cursor]
+		share := m.actions.Share
+		m.mode = modeSharing
+		return m, func() tea.Msg {
+			url, err := share(clip)
+			return sharedMsg{url: url, err: err}
+		}
 	case "d":
 		if len(m.clips) > 0 {
 			m.mode = modeConfirmDelete
@@ -185,6 +219,7 @@ func (m *listModel) View() string {
 	if m.mode == modeQR {
 		b.WriteString(m.theme.Bold.Render("QR code") + "\n\n")
 		b.WriteString(m.qr)
+		b.WriteString("\n" + m.qrURL + "\n")
 		b.WriteString("\n" + m.theme.Faint.Render("press any key to go back") + "\n")
 		return b.String()
 	}
@@ -210,6 +245,8 @@ func (m *listModel) View() string {
 	switch {
 	case m.mode == modeConfirmDelete:
 		b.WriteString(m.theme.Warning.Render("Delete this clip? press y to confirm, any other key cancels") + "\n")
+	case m.mode == modeSharing:
+		b.WriteString(m.theme.Faint.Render("Creating secret gist... (esc to cancel)") + "\n")
 	case m.status != "":
 		b.WriteString(m.status + "\n")
 	default:

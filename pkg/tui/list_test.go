@@ -60,19 +60,37 @@ func TestListEscQuitsWithoutSelection(t *testing.T) {
 }
 
 func TestListQR(t *testing.T) {
-	m := newTestModel(ListActions{})
-	m.Update(key("q"))
-	if m.mode != modeQR || m.qr == "" {
-		t.Fatalf("mode=%v qr empty=%v", m.mode, m.qr == "")
+	var shared []string
+	m := newTestModel(ListActions{Share: func(c store.Clip) (string, error) {
+		shared = append(shared, c.Name)
+		return "https://me.github.io/gh-clip-viewer/?gist=abc", nil
+	}})
+	_, cmd := m.Update(key("q"))
+	if m.mode != modeSharing || cmd == nil {
+		t.Fatalf("mode=%v cmd=%v", m.mode, cmd)
+	}
+	m.Update(cmd())
+	if len(shared) != 1 || m.mode != modeQR || m.qr == "" || !strings.Contains(m.View(), "gist=abc") {
+		t.Fatalf("shared=%v mode=%v", shared, m.mode)
 	}
 	m.Update(key("x"))
 	if m.mode != modeList {
 		t.Error("any key should leave the QR view")
 	}
 
-	m.cursor = 2 // 5000-byte clip: too long
-	m.Update(key("q"))
-	if m.mode != modeList || !strings.Contains(m.status, "too long") {
+	// A large clip is shared by link too, so its size doesn't matter.
+	m.cursor = 2
+	_, cmd = m.Update(key("q"))
+	if cmd == nil || m.mode != modeSharing {
+		t.Errorf("mode=%v", m.mode)
+	}
+}
+
+func TestListQRShareError(t *testing.T) {
+	m := newTestModel(ListActions{Share: func(store.Clip) (string, error) { return "", errors.New("boom") }})
+	_, cmd := m.Update(key("q"))
+	m.Update(cmd())
+	if m.mode != modeList || !strings.Contains(m.status, "boom") {
 		t.Errorf("mode=%v status=%q", m.mode, m.status)
 	}
 }
