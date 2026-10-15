@@ -1,0 +1,53 @@
+name: cleanup
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sweep expired clips
+        run: |
+          set -euo pipefail
+          ttl_hours=$(jq -r '.clipTTLHours' retention.json)
+          cutoff=$(( $(date +%s) - ttl_hours * 3600 ))
+          shopt -s nullglob
+          removed=0
+          for f in clips/*.txt; do
+            created=$(git log -1 --format="%ct" -- "$f")
+            if [ -n "$created" ] && [ "$created" -lt "$cutoff" ]; then
+              git rm -q "$f"
+              removed=$((removed + 1))
+            fi
+          done
+          if [ "$removed" -gt 0 ]; then
+            git config user.name "gh-clip[bot]"
+            git config user.email "gh-clip@users.noreply.github.com"
+            git commit -m "clip: sweep $removed expired clip(s)"
+            git push
+          fi
+          echo "Removed $removed expired clip(s)"
+
+      - name: Sweep expired gists
+        env:
+          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+        run: |
+          set -euo pipefail
+          now=$(date +%s)
+          gh api --paginate gists --jq '.[] | select(.description | startswith("gh-clip-share_")) | "\(.id) \(.description)"' |
+          while read -r id desc; do
+            expires=${desc#gh-clip-share_}
+            if [[ "$expires" =~ ^[0-9]+$ ]] && [ "$expires" -le "$now" ]; then
+              gh api -X DELETE "gists/$id"
+              echo "Deleted gist $id"
+            fi
+          done

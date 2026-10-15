@@ -1,26 +1,26 @@
 package main
 
 import (
-	"fmt"
+	"os"
 
-	"github.com/cli/go-gh/v2/pkg/api"
+	"github.com/SamuelBisberg/gh-clip/cmd"
+	"github.com/SamuelBisberg/gh-clip/pkg/config"
+	"github.com/SamuelBisberg/gh-clip/pkg/tui"
 )
 
-func main() {
-	fmt.Println("hi world, this is the gh-clip extension!")
-	client, err := api.DefaultRESTClient()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	response := struct {Login string}{}
-	err = client.Get("user", &response)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Printf("running as %s\n", response.Login)
-}
+// version is set at build time via -ldflags "-X main.version=vX.Y.Z"
+// (cli/gh-extension-precompile does this automatically on release).
+var version = "dev"
 
-// For more examples of using go-gh, see:
-// https://github.com/cli/go-gh/blob/trunk/example_gh_test.go
+func main() {
+	cmd.Version = version
+
+	if err := cmd.NewRootCmd().Execute(); err != nil {
+		cfg, cfgErr := config.Load()
+		if cfgErr != nil {
+			cfg = &config.Config{}
+		}
+		tui.New(cfg).Errorf("%v", err)
+		os.Exit(1)
+	}
+}

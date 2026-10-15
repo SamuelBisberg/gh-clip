@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>gh-clip</title>
+<style>
+  :root { color-scheme: light dark; --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --ok: #238636; --err: #da3633; }
+  @media (prefers-color-scheme: light) { :root { --bg: #ffffff; --fg: #1f2328; --muted: #59636e; } }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 16px/1.4 system-ui, sans-serif; }
+  #tap { all: unset; display: flex; flex-direction: column; align-items: center; justify-content: center;
+         width: 100%; height: 100%; padding: 24px; text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  #title { font-size: 2rem; font-weight: 700; }
+  #hint { margin-top: 8px; color: var(--muted); }
+  #preview { margin-top: 24px; max-width: 100%; max-height: 40vh; overflow: auto; padding: 12px 16px;
+             border-radius: 8px; border: 1px solid var(--muted); white-space: pre-wrap; word-break: break-all;
+             font: 14px/1.4 ui-monospace, monospace; text-align: left; }
+  body.ok { background: var(--ok); color: #fff; } body.ok #hint { color: #fff; }
+  body.err { background: var(--err); color: #fff; } body.err #hint { color: #fff; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<button id="tap" type="button" disabled>
+  <div id="title">Loading…</div>
+  <div id="hint"></div>
+  <pre id="preview" hidden></pre>
+</button>
+<script>
+(function () {
+  var tap = document.getElementById("tap");
+  var title = document.getElementById("title");
+  var hint = document.getElementById("hint");
+  var preview = document.getElementById("preview");
+  var text = null;
+
+  function fail(msg, sub) {
+    document.body.className = "err";
+    title.textContent = msg;
+    hint.textContent = sub || "";
+  }
+
+  function copy() {
+    if (text === null) return;
+    navigator.clipboard.writeText(text).then(function () {
+      document.body.className = "ok";
+      title.textContent = "Copied ✓";
+      hint.textContent = "You can close this tab.";
+    }, function () {
+      hint.textContent = "Clipboard blocked - long-press the text below to copy it.";
+      preview.hidden = false;
+    });
+  }
+
+  var id = new URLSearchParams(location.search).get("gist");
+  if (!id || !/^[0-9a-f]+$/i.test(id)) { fail("No clip", "This link is missing a gist id."); return; }
+
+  fetch("https://api.github.com/gists/" + encodeURIComponent(id), { headers: { Accept: "application/vnd.github+json" } })
+    .then(function (r) {
+      if (r.status === 404) throw new Error("expired");
+      if (!r.ok) throw new Error("http " + r.status);
+      return r.json();
+    })
+    .then(function (g) {
+      var file = g.files && g.files[Object.keys(g.files)[0]];
+      if (!file) throw new Error("empty");
+      // Large files are truncated in the API response; fall back to the raw URL.
+      return file.truncated ? fetch(file.raw_url).then(function (r) { return r.text(); }) : file.content;
+    })
+    .then(function (t) {
+      text = t;
+      preview.textContent = t.length > 2000 ? t.slice(0, 2000) + "…" : t;
+      preview.hidden = false;
+      title.textContent = "Tap to copy";
+      hint.textContent = "Tap anywhere";
+      tap.disabled = false;
+      tap.addEventListener("click", copy);
+    })
+    .catch(function (e) {
+      if (e.message === "expired") fail("Clip expired", "It was deleted or never existed.");
+      else fail("Couldn't load clip", String(e.message));
+    });
+})();
+</script>
+</body>
+</html>
