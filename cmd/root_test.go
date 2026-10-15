@@ -201,7 +201,9 @@ func TestInit(t *testing.T) {
 	wantPuts := []string{
 		"repos/me/gh-clip-storage/contents/retention.json",
 		"repos/me/gh-clip-storage/contents/.github/workflows/cleanup.yml",
+		"repos/me/gh-clip-storage/contents/README.md",
 		"repos/me/gh-clip-viewer/contents/index.html",
+		"repos/me/gh-clip-viewer/contents/README.md",
 	}
 	if !slices.Equal(puts, wantPuts) {
 		t.Errorf("puts = %v, want %v", puts, wantPuts)

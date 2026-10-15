@@ -22,7 +22,7 @@ gh clip init
 
 Upgrade later with `gh extension upgrade clip`.
 
-`gh clip init` is a one-time setup wizard. It creates your private storage repo, a small public page for the phone handoff, and the hourly cleanup workflow, then asks you to paste a `gist`-scoped token (it opens the right GitHub page for you) so that workflow can delete expired shares.
+`gh clip init` is a one-time setup wizard. It creates your private storage repo, a small public page for the phone handoff, and the daily cleanup workflow, then asks you to paste a `gist`-scoped token (it opens the right GitHub page for you) so that workflow can delete expired shares.
 
 ## Usage
 
@@ -62,7 +62,7 @@ $ cat url.txt | gh clip --share
 
 ### `gh clip sweep`
 
-Runs the cleanup workflow right now instead of waiting for the hourly schedule.
+Runs the cleanup workflow right now instead of waiting for the daily schedule.
 
 ### `gh clip config`
 
@@ -89,7 +89,7 @@ How long saved clips are kept is set by `clipTTLHours` in `retention.json` in yo
 - **Saved clips** are plaintext files in a **private** repo, one per clip, named `<unix-time>-<id>.txt` under `clips/`, written through the GitHub REST contents API. Auth is your existing `gh auth login` session; gh-clip never stores a token itself.
 - **Shared clips** are **secret Gists** - unlisted, reachable only by their unguessable ID. The expiry is encoded in the Gist description (`gh-clip-share_<unix-time>`).
 - **The phone page** is a static single-file page on GitHub Pages (`<you>.github.io/gh-clip-viewer`). It reads the Gist anonymously and turns the whole screen into a tap-to-copy button, because mobile browsers only allow clipboard writes from a user gesture.
-- **Cleanup** is a GitHub Actions workflow in your storage repo that runs hourly: it deletes clips older than the retention TTL (using each file's commit time) and deletes expired Gists using the `GIST_TOKEN` secret.
+- **Cleanup** is a GitHub Actions workflow in your storage repo that runs once a day: it deletes clips older than the retention TTL (using each file's commit time) and deletes expired Gists using the `GIST_TOKEN` secret.
 
 > [!WARNING]
 > Anyone with a share link can read that clip until it expires, and clips in the storage repo are plaintext - don't treat either as a vault for long-lived secrets.

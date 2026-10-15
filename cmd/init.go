@@ -71,7 +71,10 @@ func runInit() error {
 		if err := scaffold.PutFile(sess.rest, sess.owner, repo, scaffold.RetentionPath, scaffold.RetentionJSON, "clip: add retention policy"); err != nil {
 			return err
 		}
-		return scaffold.PutFile(sess.rest, sess.owner, repo, scaffold.WorkflowPath, scaffold.CleanupWorkflow, "clip: add cleanup workflow")
+		if err := scaffold.PutFile(sess.rest, sess.owner, repo, scaffold.WorkflowPath, scaffold.CleanupWorkflow, "clip: add cleanup workflow"); err != nil {
+			return err
+		}
+		return scaffold.PutFile(sess.rest, sess.owner, repo, scaffold.ReadmePath, scaffold.StorageReadme, "clip: update readme")
 	}); err != nil {
 		var hint string
 		if strings.Contains(err.Error(), ".github/workflows") {
@@ -85,6 +88,9 @@ func runInit() error {
 			return err
 		}
 		if err := scaffold.PutFile(sess.rest, sess.owner, config.ViewerRepo, scaffold.ViewerPath, scaffold.ViewerHTML, "clip: update viewer"); err != nil {
+			return err
+		}
+		if err := scaffold.PutFile(sess.rest, sess.owner, config.ViewerRepo, scaffold.ReadmePath, scaffold.ViewerReadme, "clip: update readme"); err != nil {
 			return err
 		}
 		return scaffold.EnablePages(sess.rest, sess.owner, config.ViewerRepo)

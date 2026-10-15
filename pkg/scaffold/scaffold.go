@@ -20,6 +20,10 @@ var (
 	CleanupWorkflow []byte
 	//go:embed files/viewer.html
 	ViewerHTML []byte
+	//go:embed files/storage_README.md
+	StorageReadme []byte
+	//go:embed files/viewer_README.md
+	ViewerReadme []byte
 )
 
 // Paths of the scaffolded files inside their repositories.
@@ -28,6 +32,7 @@ const (
 	WorkflowFile  = "cleanup.yml"
 	WorkflowPath  = ".github/workflows/" + WorkflowFile
 	ViewerPath    = "index.html"
+	ReadmePath    = "README.md"
 )
 
 // EnsureRepo creates owner/name if it doesn't exist yet and reports whether
