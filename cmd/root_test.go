@@ -29,10 +29,11 @@ func fakeEnv(t *testing.T, handler func(method, path string, body []byte) (any, 
 		return handler(method, path, body)
 	}
 
-	oldREST, oldPipe, oldTTY, oldClip, oldBrowser, oldSecret := newREST, stdinIsPipe, stdoutIsTTY, copyToClipboard, openBrowser, setSecret
+	oldREST, oldPipe, oldTTY, oldClip, oldBrowser, oldSecret, oldHas := newREST, stdinIsPipe, stdoutIsTTY, copyToClipboard, openBrowser, setSecret, hasSecret
 	newREST = func() (gh.REST, error) { return f, nil }
+	hasSecret = func(string, string) (bool, error) { return false, nil }
 	t.Cleanup(func() {
-		newREST, stdinIsPipe, stdoutIsTTY, copyToClipboard, openBrowser, setSecret = oldREST, oldPipe, oldTTY, oldClip, oldBrowser, oldSecret
+		newREST, stdinIsPipe, stdoutIsTTY, copyToClipboard, openBrowser, setSecret, hasSecret = oldREST, oldPipe, oldTTY, oldClip, oldBrowser, oldSecret, oldHas
 	})
 	return f
 }
@@ -210,5 +211,35 @@ func TestInit(t *testing.T) {
 	}
 	if len(pages) != 1 || pages[0] != "repos/me/gh-clip-viewer/pages" {
 		t.Errorf("pages = %v", pages)
+	}
+}
+
+func TestInitSkipsExistingRepoFilesAndSecret(t *testing.T) {
+	f := fakeEnv(t, func(method, path string, body []byte) (any, error) {
+		if method == http.MethodGet {
+			return map[string]string{"sha": "abc"}, nil // everything already exists
+		}
+		return nil, nil
+	})
+	hasSecret = func(repo, name string) (bool, error) {
+		return repo == "me/gh-clip-storage" && name == "GIST_TOKEN", nil
+	}
+	openBrowser = func(string) error { t.Error("browser opened despite existing secret"); return nil }
+	promptSecret = func(string) (string, error) { t.Error("prompted despite existing secret"); return "", nil }
+	setSecret = func(string, string, string) error { t.Error("secret overwritten"); return nil }
+	t.Cleanup(func() { promptSecret = tui.PromptSecret })
+
+	root := NewRootCmd()
+	root.SetArgs([]string{"init"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range f.Calls {
+		if c.Method == http.MethodPut && strings.HasPrefix(c.Path, "repos/me/gh-clip-storage/") {
+			t.Errorf("overwrote existing storage file: %s", c.Path)
+		}
+		if c.Method == http.MethodPost && c.Path == "user/repos" {
+			t.Error("tried to create an existing repo")
+		}
 	}
 }

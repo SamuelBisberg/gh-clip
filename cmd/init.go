@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -29,6 +30,27 @@ var setSecret = func(repo, name, value string) error {
 		return fmt.Errorf("gh secret set: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// hasSecret reports whether the Actions secret name is already set on repo.
+// Secret values can't be read back, so only existence is checked.
+var hasSecret = func(repo, name string) (bool, error) {
+	out, err := exec.Command("gh", "secret", "list", "--repo", repo, "--json", "name").Output()
+	if err != nil {
+		return false, fmt.Errorf("gh secret list: %w", err)
+	}
+	var secrets []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(out, &secrets); err != nil {
+		return false, fmt.Errorf("parsing gh secret list: %w", err)
+	}
+	for _, s := range secrets {
+		if s.Name == name {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func newInitCmd() *cobra.Command {
@@ -60,21 +82,34 @@ func runInit() error {
 		return nil
 	}
 
-	if err := step("Creating private storage repo "+repo, func() error {
-		_, err := scaffold.EnsureRepo(sess.rest, sess.owner, repo, true)
+	var created bool
+	if err := step("Checking for storage repo "+repo, func() error {
+		var err error
+		created, err = scaffold.EnsureRepo(sess.rest, sess.owner, repo, true)
 		return err
 	}); err != nil {
 		return err
 	}
+	if created {
+		theme.Successf("Created private storage repo %s", repo)
+	} else {
+		theme.Infof("Storage repo %s already exists - keeping your existing files and adding any that are missing", repo)
+	}
 
+	// On an existing repo, never overwrite files: retention.json may have
+	// been tuned by the user.
+	put := scaffold.PutFile
+	if !created {
+		put = scaffold.PutFileIfMissing
+	}
 	if err := step("Pushing retention policy and cleanup workflow", func() error {
-		if err := scaffold.PutFile(sess.rest, sess.owner, repo, scaffold.RetentionPath, scaffold.RetentionJSON, "clip: add retention policy"); err != nil {
+		if err := put(sess.rest, sess.owner, repo, scaffold.RetentionPath, scaffold.RetentionJSON, "clip: add retention policy"); err != nil {
 			return err
 		}
-		if err := scaffold.PutFile(sess.rest, sess.owner, repo, scaffold.WorkflowPath, scaffold.CleanupWorkflow, "clip: add cleanup workflow"); err != nil {
+		if err := put(sess.rest, sess.owner, repo, scaffold.WorkflowPath, scaffold.CleanupWorkflow, "clip: add cleanup workflow"); err != nil {
 			return err
 		}
-		return scaffold.PutFile(sess.rest, sess.owner, repo, scaffold.ReadmePath, scaffold.StorageReadme, "clip: update readme")
+		return put(sess.rest, sess.owner, repo, scaffold.ReadmePath, scaffold.StorageReadme, "clip: update readme")
 	}); err != nil {
 		var hint string
 		if strings.Contains(err.Error(), ".github/workflows") {
@@ -109,8 +144,16 @@ func runInit() error {
 }
 
 // setupGistToken walks the user through creating a gist-scoped token and
-// stores it as the GIST_TOKEN secret the cleanup workflow reads.
+// stores it as the GIST_TOKEN secret the cleanup workflow reads. It does
+// nothing if the secret already exists.
 func setupGistToken(theme *tui.Theme, repo string) error {
+	// If the lookup fails (e.g. no permission to list secrets), fall through
+	// and ask for the token as before.
+	if ok, err := hasSecret(repo, "GIST_TOKEN"); err == nil && ok {
+		theme.Infof("GIST_TOKEN secret already set on %s - skipping token setup", repo)
+		return nil
+	}
+
 	theme.Infof("The cleanup workflow needs a token with the `gist` scope to delete expired shares.")
 	if err := openBrowser(tokenURL); err != nil {
 		theme.Warningf("Couldn't open a browser. Create the token yourself at:\n  %s", tokenURL)

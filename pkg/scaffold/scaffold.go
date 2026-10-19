@@ -83,6 +83,18 @@ func PutFile(rest gh.REST, owner, repo, path string, content []byte, message str
 	return nil
 }
 
+// PutFileIfMissing is like PutFile but leaves an existing file untouched.
+func PutFileIfMissing(rest gh.REST, owner, repo, path string, content []byte, message string) error {
+	err := rest.Do(http.MethodGet, fmt.Sprintf("repos/%s/%s/contents/%s", owner, repo, path), nil, nil)
+	if err == nil {
+		return nil
+	}
+	if !gh.IsStatus(err, http.StatusNotFound) {
+		return fmt.Errorf("checking %s: %w", path, err)
+	}
+	return PutFile(rest, owner, repo, path, content, message)
+}
+
 // EnablePages turns on GitHub Pages for owner/repo, serving the default
 // branch root. An already-enabled site is not an error.
 func EnablePages(rest gh.REST, owner, repo string) error {
